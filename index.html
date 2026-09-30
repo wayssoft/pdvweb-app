@@ -15,6 +15,9 @@
     PDV Web, que recebe o endereço desta página em ?app_inicio=).
   Guarda em localStorage e, se não houver, em cookie. Ver
   docs/12-instalacao-cliente.md > App Android.
+  Push (Firebase): o app entrega o token FCM já nesta 1ª página (evento
+  WMN_FCM_TOKEN / window.WMNApp.getFcmToken()); ele vai junto pro PDV Web
+  (?fcm=), que registra o celular no usuário depois do login.
 -->
 <html lang="pt-br">
 <head>
@@ -92,9 +95,22 @@
         return u.origin + u.pathname;
     }
 
+    // Token do Firebase do celular (app Android com --firebase).
+    var tokenFcm = '';
+    function pegarToken(t) { if (t && typeof t === 'string') tokenFcm = t; }
+    window.addEventListener('WMN_FCM_TOKEN', function (ev) { pegarToken(ev.detail && ev.detail.token); });
+    function tentarToken() {
+        try { if (window.WMNApp && typeof window.WMNApp.getFcmToken === 'function') pegarToken(window.WMNApp.getFcmToken()); } catch (e) {}
+    }
+    tentarToken();
+    setTimeout(tentarToken, 800);
+    setTimeout(tentarToken, 1800);
+
     function abrir(servidor) {
-        // Passa o endereço desta página pro PDV Web mostrar "Trocar servidor" no login.
-        location.replace(servidor + (servidor.indexOf('?') < 0 ? '?' : '&') + 'app_inicio=' + encodeURIComponent(urlInicio));
+        tentarToken();
+        // Passa o endereço desta página (pro "Trocar servidor" do login) e o token do push.
+        location.replace(servidor + (servidor.indexOf('?') < 0 ? '?' : '&') + 'app_inicio=' + encodeURIComponent(urlInicio) +
+            (tokenFcm ? '&fcm=' + encodeURIComponent(tokenFcm) : ''));
     }
 
     function mostrarFormulario() {
