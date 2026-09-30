@@ -1,0 +1,137 @@
+<!doctype html>
+<!--
+  pdv-web / ferramentas/apk/inicio.html — página de início do app Android.
+
+  O gerador de APK da Wayssoft (devkit\android\gerar_apk.exe) cria um app
+  com WebView que abre SEMPRE a mesma URL. Esta página é essa URL fixa:
+  publicar num endereço HTTPS que nunca muda e gerar o APK apontando pra ele
+  (ferramentas\apk\gerar-apk.bat).
+
+  - 1ª vez: pede o endereço do servidor da empresa (ex:
+    http://192.168.2.77:8080/pdvweb/), guarda no celular e abre o PDV Web.
+  - Depois: "Conectando a …" por 2 s com "Trocar servidor" (se o servidor
+    salvo estiver fora do ar, dá pra trocar) e abre sozinha.
+  - ?trocar=1 abre direto o formulário (link "Trocar servidor" do login do
+    PDV Web, que recebe o endereço desta página em ?app_inicio=).
+  Guarda em localStorage e, se não houver, em cookie. Ver
+  docs/12-instalacao-cliente.md > App Android.
+-->
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WMN PDV Web</title>
+<style>
+    :root { --azul: #0a6ed1; --cinza: #5c6e79; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f7f7f7; color: #32363a; }
+    header { background: var(--cinza); color: #fff; padding: 14px 16px; font-weight: 700; }
+    main { max-width: 420px; margin: 0 auto; padding: 16px; }
+    .card { background: #fff; border: 1px solid #dfe4e8; border-radius: 8px; padding: 18px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    p { font-size: 14px; color: #555; margin: 0 0 14px; line-height: 1.4; }
+    label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+    input { width: 100%; padding: 11px 10px; border: 1px solid #bbb; border-radius: 6px; font-size: 16px; }
+    button { width: 100%; padding: 12px; border: 0; border-radius: 6px; font-size: 16px; font-weight: 700; margin-top: 12px; cursor: pointer; }
+    .primario { background: var(--azul); color: #fff; }
+    .secundario { background: #fff; color: var(--azul); border: 1px solid var(--azul); }
+    .erro { color: #bb0000; font-size: 13px; margin-top: 8px; min-height: 1em; }
+    .dica { font-size: 12px; color: #888; margin-top: 10px; }
+    .endereco { font-family: monospace; font-size: 13px; word-break: break-all; background: #f2f2f2; padding: 8px; border-radius: 4px; margin-bottom: 4px; }
+    .barra { height: 4px; background: #e5eef8; border-radius: 2px; overflow: hidden; margin: 14px 0 4px; }
+    .barra div { height: 100%; width: 0; background: var(--azul); transition: width 2s linear; }
+    [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>WMN PDV Web</header>
+<main>
+    <div class="card" id="conectando" hidden>
+        <h1>Conectando…</h1>
+        <div class="endereco" id="enderecoAtual"></div>
+        <div class="barra"><div id="progresso"></div></div>
+        <button type="button" class="secundario" id="trocar">Trocar servidor</button>
+    </div>
+
+    <form class="card" id="formulario" hidden>
+        <h1>Servidor da empresa</h1>
+        <p>Digite o endereço do PDV Web da sua empresa. Ele fica guardado neste celular — dá pra trocar depois.</p>
+        <label for="url">Endereço</label>
+        <input type="url" id="url" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="http://192.168.0.10:8080/pdvweb/" required>
+        <div class="erro" id="erro"></div>
+        <button type="submit" class="primario">Conectar</button>
+        <div class="dica">Não sabe o endereço? Peça pro responsável pelo sistema WMN da empresa.</div>
+    </form>
+</main>
+<script>
+(function () {
+    var CHAVE = 'pdvweb_servidor';
+    var params = new URLSearchParams(location.search);
+    var urlInicio = location.origin + location.pathname;
+
+    function ler() {
+        try { var v = localStorage.getItem(CHAVE); if (v) return v; } catch (e) {}
+        var m = document.cookie.match(/(?:^|;\s*)pdvweb_servidor=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+    function guardar(v) {
+        try { localStorage.setItem(CHAVE, v); } catch (e) {}
+        document.cookie = CHAVE + '=' + encodeURIComponent(v) + ';max-age=' + (5 * 365 * 86400) + ';path=/;samesite=lax';
+    }
+
+    // "192.168.0.10:8080" → "http://192.168.0.10:8080/pdvweb/"; sem caminho, entra /pdvweb/.
+    function normalizar(texto) {
+        texto = (texto || '').trim();
+        if (!texto) return '';
+        if (!/^https?:\/\//i.test(texto)) texto = 'http://' + texto;
+        var u;
+        try { u = new URL(texto); } catch (e) { return ''; }
+        if (!u.hostname) return '';
+        if (u.pathname === '/' || u.pathname === '') u.pathname = '/pdvweb/';
+        else if (!/\/$/.test(u.pathname) && !/\.php$/i.test(u.pathname)) u.pathname += '/';
+        return u.origin + u.pathname;
+    }
+
+    function abrir(servidor) {
+        // Passa o endereço desta página pro PDV Web mostrar "Trocar servidor" no login.
+        location.replace(servidor + (servidor.indexOf('?') < 0 ? '?' : '&') + 'app_inicio=' + encodeURIComponent(urlInicio));
+    }
+
+    function mostrarFormulario() {
+        document.getElementById('conectando').hidden = true;
+        document.getElementById('formulario').hidden = false;
+        var campo = document.getElementById('url');
+        campo.value = ler();
+        campo.focus();
+    }
+
+    var cancelado = false;
+    document.getElementById('trocar').addEventListener('click', function () {
+        cancelado = true;
+        mostrarFormulario();
+    });
+
+    document.getElementById('formulario').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var servidor = normalizar(document.getElementById('url').value);
+        if (!servidor) {
+            document.getElementById('erro').textContent = 'Endereço inválido. Exemplo: http://192.168.0.10:8080/pdvweb/';
+            return;
+        }
+        guardar(servidor);
+        abrir(servidor);
+    });
+
+    var salvo = ler();
+    if (!salvo || params.get('trocar') === '1') {
+        mostrarFormulario();
+        return;
+    }
+    document.getElementById('enderecoAtual').textContent = salvo;
+    document.getElementById('conectando').hidden = false;
+    requestAnimationFrame(function () { document.getElementById('progresso').style.width = '100%'; });
+    setTimeout(function () { if (!cancelado) abrir(salvo); }, 2000);
+})();
+</script>
+</body>
+</html>
